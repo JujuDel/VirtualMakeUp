@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Sun May 24 19:07:51 2020
-
-@author: dj717
-"""
-
 
 import cv2
 import math
@@ -230,17 +224,26 @@ def colorIris(roiEye, color):
     _, threshold = cv2.threshold(gray, 75, 255, cv2.THRESH_BINARY_INV)
 
     # Find the contours on the thresholds
-    cnts, _ = cv2.findContours(
+    if (cv2.__version__[0] == '3'):
+        _, cnts, _ = cv2.findContours(
+                threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    else:
+        cnts, _ = cv2.findContours(
                 threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     # Keep the longest contour
     cnt = sorted(cnts, key=lambda x:cv2.contourArea(x), reverse=True)[0]
 
     # Compute circles shape on the blured image
-    rows = gray.shape[0]
-    circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1, rows / 8,
-                               param1=15, param2=30,
-                               minRadius=1, maxRadius=30)
+    if (cv2.__version__[0] == '3'):
+        circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT,1, 20,
+                                   param1=50, param2=30,
+                                   minRadius=0, maxRadius=0)
+    else:
+        rows = gray.shape[0]
+        circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1, rows / 8,
+                                   param1=15, param2=30,
+                                   minRadius=1, maxRadius=30)
 
     if circles is not None:
         circles = np.uint16(np.around(circles))
