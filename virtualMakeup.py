@@ -21,17 +21,26 @@ from PIL import Image, ImageTk
 # Init image
 g_img = None
 
-# Init image
-g_currentImg = None
 
 # Lips polygon
-g_lipsPolygon = []
+g_lipsMask = []
 
 # Lips polygon
 g_lipsColor = None
 
 # Lips color intensity
 g_lipsIntensity = 0.3
+
+
+# TeethMask
+g_teethMask = None
+
+# Teeth are detected or not
+g_teethPresence = False
+
+# Teeth whiten strength
+g_teethWhitenStrength = 0
+
 
 # Right Eye
 g_eyeROI_R = []
@@ -44,8 +53,10 @@ g_eye_L = None
 # Eye color intensity
 g_eyesIntensity = 0.15
 
+
 # Tkinter Label to display the image
 g_vLabel = None
+
 
 ###############################################################################
 #
@@ -54,9 +65,10 @@ g_vLabel = None
 ###############################################################################
 
 # Draw points for any numbers of landmarks models
-def renderFacePoints(im, points, color=(0, 255, 0), radius=1):
+def renderFacePoints(im, points, roi=(0,0), color=(0, 255, 0), radius=1):
+    rx, ry = roi
     for x, y in points:
-        cv2.circle(im, (x, y), radius, color, -1)
+        cv2.circle(im, (x - rx, y - ry), radius, color, -1)
 
 
 # Detect facial landmarks in an image
@@ -105,96 +117,209 @@ def onColorLipsClick():
 
     g_lipsColor = colorchooser.askcolor(title='Select a lips color')[0]
 
-    imLips = copy.deepcopy(g_img)
-
-    imLips = updateEyes(imLips)
-    imLips = updateLips(imLips)
-
-    imgTk = ImageTk.PhotoImage(image=Image.fromarray(imLips))
-    g_vLabel.configure(image=imgTk)
-    g_vLabel.image = imgTk
+    applyAll()
 
 
 def onReinitLipsClick():
-    global g_vLabel, g_lipsColor
+    global g_lipsColor
 
     g_lipsColor = None
 
-    imEyes = copy.deepcopy(g_img)
-    imEyes = updateEyes(imEyes)
-
-    imgTk = ImageTk.PhotoImage(image=Image.fromarray(imEyes))
-    g_vLabel.configure(image=imgTk)
-    g_vLabel.image = imgTk
+    applyAll()
 
 
 def onColorEyesClick():
-    global g_vLabel
-
     computeGlobalEyesExtractedImages(
             colorchooser.askcolor(title='Select an eye color')[0])
 
-    imEyes = copy.deepcopy(g_img)
-
-    imEyes = updateLips(imEyes)
-    imEyes = updateEyes(imEyes)
-
-    imgTk = ImageTk.PhotoImage(image=Image.fromarray(imEyes))
-    g_vLabel.configure(image=imgTk)
-    g_vLabel.image = imgTk
+    applyAll()
 
 
 def onReinitEyesClick():
-    global g_vLabel
-
     initEyesExtractedImages()
 
-    imLips = copy.deepcopy(g_img)
-    imLips = updateLips(imLips)
+    applyAll()
 
-    imgTk = ImageTk.PhotoImage(image=Image.fromarray(imLips))
-    g_vLabel.configure(image=imgTk)
-    g_vLabel.image = imgTk
+
+def onWhitenTeethClick():
+    global g_teethWhitenStrength
+
+    g_teethWhitenStrength = min(1, g_teethWhitenStrength + 0.05)
+
+    applyAll()
+
+
+def onReinitTeethClick():
+    global g_teethWhitenStrength
+
+    g_teethWhitenStrength = 0
+
+    applyAll()
 
 
 def onReinitAllClick():
-    global g_vLabel, g_lipsColor
+    global g_lipsColor, g_teethWhitenStrength
 
     g_lipsColor = None
     initEyesExtractedImages()
+    g_teethWhitenStrength = 0
 
-    imgTk = ImageTk.PhotoImage(image=Image.fromarray(g_img))
+    applyAll()
+
+
+def onSave():
+    img = cv2.cvtColor(applyAll(), cv2.COLOR_RGB2BGR)
+
+    cv2.imwrite("image.png", img)
+
+
+def applyAll():
+    global g_vLabel
+
+    img = updateTeeth(g_img)
+    img = updateEyes(img)
+    img = updateLips(img)
+
+    imgTk = ImageTk.PhotoImage(image=Image.fromarray(img))
     g_vLabel.configure(image=imgTk)
     g_vLabel.image = imgTk
 
+    return img
+
+
 ###############################################################################
 #
-#    LIPS
+#    LIPS AND TEETHS
 #
 ###############################################################################
 
-def createLipsPolygon(points):
-    global g_lipsPolygon
-
-    g_lipsPolygon = [points[i] for i in range(48, 60)]
-    g_lipsPolygon.append(points[48])
-    g_lipsPolygon = np.array([ g_lipsPolygon ], np.int32)
+def roiFromPoints(points):
+    xmin, ymin = points[0]
+    xmax, ymax = points[0]
+    for x, y in points:
+        xmin = min(x, xmin)
+        ymin = min(y, ymin)
+        xmax = max(x, xmax)
+        ymax = max(y, ymax)
+    return (xmin, xmax, ymin, ymax)
 
 
 def updateLips(img):
     if not g_lipsColor is None:
-        imgLips = copy.deepcopy(g_img)
-
-        cv2.fillPoly(
-            imgLips,
-            [g_lipsPolygon],
-            g_lipsColor)
+        imgColor = copy.deepcopy(img)
+        for i in range(0, len(imgColor.ravel()), 3):
+            if g_lipsMask.ravel()[i]:
+                imgColor.ravel()[i:i + 3] = g_lipsColor
 
         return cv2.addWeighted(
                 img, 1 - g_lipsIntensity,
-                imgLips, g_lipsIntensity,
+                imgColor, g_lipsIntensity,
                 0)
     return img
+
+
+def updateTeeth(img):
+    if g_teethPresence and g_teethWhitenStrength > 0:
+        imgColor = copy.deepcopy(img)
+        for i in range(0, len(imgColor.ravel()), 3):
+            if g_teethMask.ravel()[i]:
+                imgColor.ravel()[i:i + 3] = (255, 255, 255)
+
+        return cv2.addWeighted(
+                img, 1 - g_teethWhitenStrength,
+                imgColor, g_teethWhitenStrength,
+                0)
+    return img
+
+
+def createGlobalLipsAndTeethsMasks(points):
+    global g_lipsMask, g_teethMask, g_teethPresence
+
+    # Get the polygons from the facial landmarks
+    mouthPoly = [points[i] for i in range(48, 60)]
+    mouthPoly.append(points[48])
+    mouthPoly = np.array([ mouthPoly ], np.int32)
+
+    lipsPolyUp = [points[i] for i in (49, 50, 51, 52, 53, 63, 62, 61, 49)]
+    lipsPolyUp = np.array([ lipsPolyUp ], np.int32)
+
+    lipsPolyDown = [points[i] for i in (59, 60, 67, 66, 65, 64, 55, 56, 58, 59)]
+    lipsPolyDown = np.array([ lipsPolyDown ], np.int32)
+
+    mouthPolyUnknown = [points[i] for i in range(60, 68)]
+    mouthPolyUnknown += [points[60]]
+    mouthPolyUnknown = np.array([ mouthPolyUnknown ], np.int32)
+
+
+    # Get the mouth ROI from the polygon
+    roi = roiFromPoints(mouthPoly[0])
+    imgRoi = g_img[roi[2]:roi[3], roi[0]:roi[1]]
+
+    # Convert to CIELAB colorspace and take the clarity channel
+    clarity, _, _ = cv2.split(cv2.cvtColor(imgRoi, cv2.COLOR_BGR2LAB))
+
+
+    # Rectify the polygons coord to fit the roi
+    for pol in (mouthPoly, lipsPolyUp, lipsPolyDown, mouthPolyUnknown):
+        for i in range(len(pol[0])):
+            pol[0][i][0] -= roi[0]
+            pol[0][i][1] -= roi[2]
+
+
+    maskMouth = np.zeros(clarity.shape, dtype=np.uint8)
+    cv2.fillPoly(
+            maskMouth,
+            [mouthPoly],
+            1)
+
+    maskUnknown = np.zeros(clarity.shape, dtype=np.uint8)
+    cv2.fillPoly(
+            maskUnknown,
+            [mouthPolyUnknown],
+            1)
+
+    maskLips = np.zeros(clarity.shape, dtype=np.uint8)
+    cv2.fillPoly(
+            maskLips,
+            [lipsPolyUp],
+            1)
+    cv2.fillPoly(
+            maskLips,
+            [lipsPolyDown],
+            1)
+
+    # As the teeth usually has a high clarity, compute the lowest clarity
+    # value of the lips
+    lowerC = 255
+    for i, maskedIn in enumerate(maskLips.ravel()):
+        if maskedIn:
+            lowerC = min(lowerC, clarity.ravel()[i])
+    lowerC = (lowerC + 1.5 * 255) / 2.5
+
+
+    # Create the mask of the teeth
+    _, maskTeeth = cv2.threshold(clarity, lowerC, 255, cv2.THRESH_BINARY)
+    maskTeeth = maskTeeth / 255
+    maskTeeth.ravel()[np.where(maskMouth.ravel() == 0)] = 0
+    maskTeeth.ravel()[np.where(maskUnknown.ravel() == 0)] = 0
+    maskTeeth.ravel()[np.where(maskLips.ravel())] = 0
+
+    # Check if teeth are found
+    # TODO: Find a good threshold
+    g_teethPresence = sum(maskTeeth.ravel()) > 0
+
+    # Set the global teeth BGR mask
+    g_teethMask = np.zeros(g_img.shape[:2], dtype=np.uint8)
+    g_teethMask[roi[2]:roi[3], roi[0]:roi[1]] = maskTeeth
+    g_teethMask = cv2.cvtColor(g_teethMask, cv2.COLOR_GRAY2BGR)
+
+    # Set the global lips BGR mask
+    g_lipsMask = np.zeros(g_img.shape[:2], dtype=np.uint8)
+    if g_teethPresence:
+        maskMouth.ravel()[np.where(maskUnknown.ravel())] = 0
+    g_lipsMask[roi[2]:roi[3], roi[0]:roi[1]] = maskMouth
+    g_lipsMask = cv2.cvtColor(g_lipsMask, cv2.COLOR_GRAY2BGR)
+
 
 ###############################################################################
 #
@@ -329,18 +454,24 @@ def updateEyes(img):
                            imgEyes, g_eyesIntensity,
                            0)
 
+
 ###############################################################################
 #
 #    MAIN
 #
 ###############################################################################
 
+
+path1 = "data/images/girl-no-makeup.jpg"
+path2 = "data/images/face1.png"
+path3 = "data/images/face2.jpg"
+
 def main():
     global g_img, g_vLabel
 
     # Input image in RGB format
     g_img = cv2.cvtColor(
-                cv2.imread("data/images/girl-no-makeup.jpg"),
+                cv2.imread(path1),
                 cv2.COLOR_BGR2RGB)
 
     # Landmark model location
@@ -355,8 +486,8 @@ def main():
     # Get the facial landmark points
     points = getLandmarks(faceDetector, landmarkDetector, g_img)
 
-    # Create the lips polygon
-    createLipsPolygon(points)
+    # Create Lips and polygon masks
+    createGlobalLipsAndTeethsMasks(points)
 
     # Create the eyes ROI
     createGlobalEyesROI(points)
@@ -377,33 +508,59 @@ def main():
             root,
             text='Reinit lips color',
             command=onReinitLipsClick)
-    buttonReinitLips.grid(row=0, column=3)
+    buttonReinitLips.grid(row=1, column=2)
 
-    # Button to reinit all
-    buttonReinitLips = Button(
-            root,
-            text='Reinit all',
-            command=onReinitAllClick)
-    buttonReinitLips.grid(row=0, column=6)
 
     # Button to change the color of the eyes
     buttonLipsColor = Button(
             root,
             text='Change eyes color',
             command=onColorEyesClick)
-    buttonLipsColor.grid(row=0, column=9)
+    buttonLipsColor.grid(row=0, column=4)
 
     # Button to reinit the color of the eyes
     buttonReinitLips = Button(
             root,
             text='Reinit eyes color',
             command=onReinitEyesClick)
-    buttonReinitLips.grid(row=0, column=10)
+    buttonReinitLips.grid(row=1, column=4)
+
+
+    # Button to change the color of the eyes
+    buttonLipsColor = Button(
+            root,
+            text='Whiten teeth',
+            command=onWhitenTeethClick)
+    buttonLipsColor.grid(row=0, column=6)
+
+    # Button to reinit the color of the eyes
+    buttonReinitLips = Button(
+            root,
+            text='Reinit teeth',
+            command=onReinitTeethClick)
+    buttonReinitLips.grid(row=1, column=6)
+
+
+    # Button to reinit all
+    buttonReinitLips = Button(
+            root,
+            text='Reinit all',
+            command=onReinitAllClick)
+    buttonReinitLips.grid(row=0, column=8)
+
+    # Button to save as
+    buttonReinitLips = Button(
+            root,
+            text='Save',
+            command=onSave)
+    buttonReinitLips.grid(row=1, column=8)
+
 
     # Image to display
     imgTk = ImageTk.PhotoImage(image=Image.fromarray(g_img))
     g_vLabel = Label(root, image=imgTk)
-    g_vLabel.grid(row=1, column=0, columnspan=15)
+    g_vLabel.grid(row=2, column=0, columnspan=10)
+
 
     # Launch the app
     root.mainloop()

@@ -1,3 +1,4 @@
+
 # VirtualMakeUp tool
 
 Before | After
@@ -7,6 +8,13 @@ Before | After
 ## Lips
 
 ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/lips.gif)
+
+## Lips and teeth
+
+Before | Teeth Mask | After
+:---: | :---: | :---:
+![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/face1.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/teethMask1.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/result1.png)
+![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/face1.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/teethMask1.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/result1.png)
 
 ## Eyes
 
