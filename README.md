@@ -14,7 +14,7 @@ Before | After
 Before | Teeth Mask | After
 :---: | :---: | :---:
 ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/face1.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/teethMask1.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/result1.png)
-![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/face1.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/teethMask1.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/result1.png)
+![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/face2.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/teethMask2.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/result2.png)
 
 ## Eyes
 
