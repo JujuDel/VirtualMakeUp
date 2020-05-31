@@ -1,21 +1,25 @@
-
 # VirtualMakeUp tool
 
 Before | After
 :---: | :---:
-![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/girl-no-makeup.jpg) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/after.jpg)
+![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/girl-no-makeup.jpg) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/results/whole/girl-no-makeup.png)
+![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/face1.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/results/whole/face1.png)
+![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/face2.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/results/whole/face2.png)
 
-## Lips
+## Masks - Teeth / Lips / Eyes
 
-![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/lips.gif)
+Input | Mask
+:---: | :---:
+![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/girl-no-makeup.jpg) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/results/masks/girl-no-makeup.png)
+![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/face1.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/results/masks/face1.png)
+![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/face2.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/results/masks/face2.png)
 
-## Lips and teeth
+## Mouth
 
-Before | Teeth Mask | After
-:---: | :---: | :---:
-![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/face1.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/teethMask1.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/result1.png)
-![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/face2.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/teethMask2.png) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/images/result2.png)
+Lips | Lips & Teeth
+:---: | :---:
+![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/gifs/girl-no-makeup_Lips.gif) | ![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/gifs/face2_LipsTeeth.gif)
 
 ## Eyes
 
-![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/eyes.gif)
+![](https://github.com/JujuDel/VirtualMakeUp/blob/master/data/gifs/face2_Eyes.gif)

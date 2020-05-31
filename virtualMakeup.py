@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import cv2
-import math
 import copy
 import dlib
 
@@ -23,9 +22,9 @@ g_img = None
 
 
 # Lips polygon
-g_lipsMask = []
+g_lipsMask = None
 
-# Lips polygon
+# Lips color
 g_lipsColor = None
 
 # Lips color intensity
@@ -43,14 +42,12 @@ g_teethWhitenStrength = 0
 
 
 # Right Eye
-g_eyeROI_R = []
-g_eye_R = None
+g_eyesMask = None
 
-# Left Eye
-g_eyeROI_L = []
-g_eye_L = None
+# Eyes color
+g_eyesColor = None
 
-# Eye color intensity
+# Eyes color intensity
 g_eyesIntensity = 0.15
 
 
@@ -105,6 +102,17 @@ def getLandmarks(faceDetector, landmarkDetector, imRGB, FACE_DOWNSAMPLE_RATIO = 
     return points
 
 
+def roiFromPoints(points):
+    xmin, ymin = points[0]
+    xmax, ymax = points[0]
+    for x, y in points:
+        xmin = min(x, xmin)
+        ymin = min(y, ymin)
+        xmax = max(x, xmax)
+        ymax = max(y, ymax)
+    return [xmin, xmax, ymin, ymax]
+
+
 ###############################################################################
 #
 #    TKINTER CALLBACK
@@ -113,7 +121,7 @@ def getLandmarks(faceDetector, landmarkDetector, imRGB, FACE_DOWNSAMPLE_RATIO = 
 
 
 def onColorLipsClick():
-    global g_vLabel, g_lipsColor
+    global g_lipsColor
 
     g_lipsColor = colorchooser.askcolor(title='Select a lips color')[0]
 
@@ -129,14 +137,17 @@ def onReinitLipsClick():
 
 
 def onColorEyesClick():
-    computeGlobalEyesExtractedImages(
-            colorchooser.askcolor(title='Select an eye color')[0])
+    global g_eyesColor
+
+    g_eyesColor = colorchooser.askcolor(title='Select an eye color')[0]
 
     applyAll()
 
 
 def onReinitEyesClick():
-    initEyesExtractedImages()
+    global g_eyesColor
+
+    g_eyesColor = None
 
     applyAll()
 
@@ -158,10 +169,10 @@ def onReinitTeethClick():
 
 
 def onReinitAllClick():
-    global g_lipsColor, g_teethWhitenStrength
+    global g_lipsColor, g_eyesColor, g_teethWhitenStrength
 
     g_lipsColor = None
-    initEyesExtractedImages()
+    g_eyesColor = None
     g_teethWhitenStrength = 0
 
     applyAll()
@@ -192,17 +203,6 @@ def applyAll():
 #    LIPS AND TEETHS
 #
 ###############################################################################
-
-def roiFromPoints(points):
-    xmin, ymin = points[0]
-    xmax, ymax = points[0]
-    for x, y in points:
-        xmin = min(x, xmin)
-        ymin = min(y, ymin)
-        xmax = max(x, xmax)
-        ymax = max(y, ymax)
-    return (xmin, xmax, ymin, ymax)
-
 
 def updateLips(img):
     if not g_lipsColor is None:
@@ -327,132 +327,99 @@ def createGlobalLipsAndTeethsMasks(points):
 #
 ###############################################################################
 
-def colorIris(roiEye, color):
-    dst = copy.deepcopy(roiEye)
+def computeIrisMask(imgEye, roiEye, points):
+    poly = [[x, y] for x, y in points]
 
-    # Split the RGB chanels
-    b, g, r = cv2.split(dst)
+    for i in range(len(poly)):
+        poly[i][0] -= roiEye[0]
+        poly[i][1] -= roiEye[1]
 
-    # Compute the sum of the intensities
-    sB = sum(sum(b))
-    sG = sum(sum(g))
-    sR = sum(sum(r))
-    maxi = max(sB, max(sG, sR))
+    poly.append(poly[0])
+    poly = np.array([ poly ], np.int32)
 
-    # Select the highest one
-    gray = r if maxi == sR else g if maxi == sG else b
+    maskEye = np.zeros(imgEye.shape[:2], dtype=imgEye.dtype)
+    cv2.fillPoly(
+        maskEye,
+        [poly],
+        1)
+
+    # Keep the blue channel
+    gray, _, _ = cv2.split(imgEye)
+    gray.ravel()[np.where(maskEye.ravel() == 0)] = 0
+
+    # Compute value for thresholding
+    average = 1. * sum(gray.ravel()) / sum(maskEye.ravel())
+    average = (255. + 3 * average) / 4.
 
     # Reduce the noise
-    gray = cv2.GaussianBlur(gray, (11, 11), 0)
+    gray = cv2.GaussianBlur(gray, (3, 3), 0)
 
     # Threshold
-    _, threshold = cv2.threshold(gray, 75, 255, cv2.THRESH_BINARY_INV)
+    _, threshold = cv2.threshold(gray, average, 255, cv2.THRESH_BINARY_INV)
+    threshold.ravel()[np.where(maskEye.ravel() == 0)] = 0
 
-    # Find the contours on the thresholds
-    if (cv2.__version__[0] == '3'):
-        _, cnts, _ = cv2.findContours(
-                threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    else:
-        cnts, _ = cv2.findContours(
-                threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    # Keep the iris only
+    threshold = cv2.bitwise_and(threshold, maskEye * 255)
 
-    # Keep the longest contour
-    cnt = sorted(cnts, key=lambda x:cv2.contourArea(x), reverse=True)[0]
+    # Erode and dilate
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    threshold = cv2.erode(threshold, kernel)
+    threshold = cv2.dilate(threshold, kernel)
 
-    # Compute circles shape on the blured image
-    if (cv2.__version__[0] == '3'):
-        circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT,1, 20,
-                                   param1=50, param2=30,
-                                   minRadius=0, maxRadius=0)
-    else:
-        rows = gray.shape[0]
-        circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1, rows / 8,
-                                   param1=15, param2=30,
-                                   minRadius=1, maxRadius=30)
+    # Resulting mask
+    res = np.zeros(imgEye.shape[:2], dtype=imgEye.dtype)
+    res.ravel()[np.where(threshold.ravel() != 0)] = 1
 
-    if circles is not None:
-        circles = np.uint16(np.around(circles))
-
-        for i in circles[0,:]:
-            # Center of the circle
-            center = (i[0], i[1])
-
-            # If the center is inside the longest contour
-            if cv2.pointPolygonTest(cnt, center, False) == 1:
-                # Draw the circle
-                cv2.circle(dst, center, i[2], color, -1)
-
-                # Adjust the upper part of the circle to fit with the contours
-                xmin, xmax = i[0] - i[2], i[0] + i[2]
-                ymin, ymax = i[1] - i[2], int(i[1] - 0.5 * i[2])
-                for y in range(ymin, ymax + 1):
-                    y2 = (y - i[1])**2
-                    for x in range(xmin, xmax + 1):
-                        point = (x, y)
-                        # If the point (x, y) is either not in the circle or
-                        # not strictly inside the contour, remove the added color
-                        if math.sqrt(y2 + (x - i[0])**2) > i[2] or \
-                           cv2.pointPolygonTest(cnt, point, False) <= 0:
-                            dst[y][x] = roiEye[y][x]
-
-                # The circle corresponding to the eye has been treated
-                break
-
-    return dst
+    return res
 
 
-def createGlobalEyesROI(points, radius=30):
-    global g_eyeROI_R, g_eyeROI_L
+def createGlobalEyesMask(points, radius=30):
+    global g_eyesMask
 
     # Find the roi for left Eye
-    g_eyeROI_L = [
-            points[37][0] - radius,
-            points[37][1] - radius,
-            (points[40][0] - points[37][0] + 2 * radius),
-            (points[41][1] - points[37][1] + 2 * radius)
-            ]
+    eyeROI_L = roiFromPoints(points[36:42])
+    eyeROI_L[2] -= (eyeROI_L[3] - eyeROI_L[2]) // 2
+    eyeROI_L[3] += (eyeROI_L[3] - eyeROI_L[2]) // 2
 
     # Find the roi for right Eye
-    g_eyeROI_R = [
-            points[43][0] - radius,
-            points[43][1] - radius,
-            (points[46][0] - points[43][0] + 2 * radius),
-            (points[47][1] - points[43][1] + 2 * radius)
-            ]
+    eyeROI_R = roiFromPoints(points[42:48])
+    eyeROI_R[2] -= (eyeROI_R[3] - eyeROI_R[2]) // 2
+    eyeROI_R[3] += (eyeROI_R[3] - eyeROI_R[2]) // 2
 
+    # Extract roi of the left eye
+    eye_L = g_img[eyeROI_L[2]:eyeROI_L[3],
+                  eyeROI_L[0]:eyeROI_L[1]]
 
-def computeGlobalEyesExtractedImages(color):
-    global g_eye_R, g_eye_L
+    # Extract roi of the right eye
+    eye_R = g_img[eyeROI_R[2]:eyeROI_R[3],
+                  eyeROI_R[0]:eyeROI_R[1]]
 
-    initEyesExtractedImages()
+    # Compute the mask per eyes
+    maskL = computeIrisMask(eye_L, (eyeROI_L[0], eyeROI_L[2]), points[36:42])
+    maskL = cv2.cvtColor(maskL, cv2.COLOR_GRAY2BGR)
+    maskR = computeIrisMask(eye_R, (eyeROI_R[0], eyeROI_R[2]), points[42:48])
+    maskR = cv2.cvtColor(maskR, cv2.COLOR_GRAY2BGR)
 
-    g_eye_R = colorIris(g_eye_R, color)
-    g_eye_L = colorIris(g_eye_L, color)
-
-
-def initEyesExtractedImages():
-    global g_eye_R, g_eye_L
-
-    # Extracted image of the left eye
-    g_eye_L = g_img[g_eyeROI_L[1]:g_eyeROI_L[1] + g_eyeROI_L[3],
-                  g_eyeROI_L[0]:g_eyeROI_L[0] + g_eyeROI_L[2]]
-
-    # Extracted image of the right eye
-    g_eye_R = g_img[g_eyeROI_R[1]:g_eyeROI_R[1] + g_eyeROI_R[3],
-                  g_eyeROI_R[0]:g_eyeROI_R[0] + g_eyeROI_R[2]]
+    # Combine both masks
+    g_eyesMask = np.zeros(g_img.shape, dtype=g_img.dtype)
+    g_eyesMask[eyeROI_R[2]:eyeROI_R[3],
+               eyeROI_R[0]:eyeROI_R[1]] = maskR
+    g_eyesMask[eyeROI_L[2]:eyeROI_L[3],
+               eyeROI_L[0]:eyeROI_L[1]] = maskL
 
 
 def updateEyes(img):
-    imgEyes = copy.deepcopy(img)
+    if not g_eyesColor is None:
+        imgColor = copy.deepcopy(img)
+        for i in range(0, len(imgColor.ravel()), 3):
+            if g_eyesMask.ravel()[i]:
+                imgColor.ravel()[i:i + 3] = g_eyesColor
 
-    imgEyes[g_eyeROI_L[1]:g_eyeROI_L[1] + g_eyeROI_L[3],
-           g_eyeROI_L[0]:g_eyeROI_L[0] + g_eyeROI_L[2]] = g_eye_L
-    imgEyes[g_eyeROI_R[1]:g_eyeROI_R[1] + g_eyeROI_R[3],
-           g_eyeROI_R[0]:g_eyeROI_R[0] + g_eyeROI_R[2]] = g_eye_R
-
-    return cv2.addWeighted(img, 1 - g_eyesIntensity,
-                           imgEyes, g_eyesIntensity,
-                           0)
+        return cv2.addWeighted(
+                img, 1 - g_eyesIntensity,
+                imgColor, g_eyesIntensity,
+                0)
+    return img
 
 
 ###############################################################################
@@ -464,14 +431,15 @@ def updateEyes(img):
 
 path1 = "data/images/girl-no-makeup.jpg"
 path2 = "data/images/face1.png"
-path3 = "data/images/face2.jpg"
+path3 = "data/images/face2.png"
+
 
 def main():
     global g_img, g_vLabel
 
     # Input image in RGB format
     g_img = cv2.cvtColor(
-                cv2.imread(path1),
+                cv2.imread(path3),
                 cv2.COLOR_BGR2RGB)
 
     # Landmark model location
@@ -490,11 +458,11 @@ def main():
     createGlobalLipsAndTeethsMasks(points)
 
     # Create the eyes ROI
-    createGlobalEyesROI(points)
-    initEyesExtractedImages()
+    createGlobalEyesMask(points)
 
     # Tkinter
     root = Tk()
+    root.title("VirtualMakeUp")
 
     # Button to change the color of the lips
     buttonLipsColor = Button(
